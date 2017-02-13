@@ -6,6 +6,7 @@
 #endif
 #include <legacymsp430.h>
 
+#define CURVELEN 498
 
 #if __GNUC__ > 4 || \
   (__GNUC__ == 4 && (__GNUC_MINOR__ > 5 || \
@@ -48,10 +49,28 @@ const unsigned char curve[] = {
   131,   132,   133,   134,   135,   136,   137,   138, 
   139,   140,   141,   142,   143,   144,   145,   146, 
   147,   148,   149,   150,   151,   152,   153,   154, 
-  155,   156
+  155,   156, 
+  155, 154, 153, 152, 151, 150, 149, 148, 147, 146, 145,
+  144, 143, 142, 141, 140, 139, 138, 137, 136, 135, 134, 
+  133, 132, 131, 130, 129, 128, 127, 126, 125, 124, 123, 
+  122, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 
+  112, 111, 110, 109, 108, 107, 106, 106, 105, 104, 103, 
+  102, 101, 100, 99, 98, 97, 96, 95, 95, 94, 93, 92, 91, 
+  90, 89, 88, 87, 87, 86, 85, 84, 83, 82, 81, 80, 80, 79, 
+  78, 77, 76, 75, 75, 74, 73, 72, 71, 70, 70, 69, 68, 67, 
+  66, 66, 65, 64, 63, 62, 62, 61, 60, 59, 59, 58, 57, 56, 
+  56, 55, 54, 53, 53, 52, 51, 50, 50, 49, 48, 48, 47, 46, 
+  46, 45, 44, 43, 43, 42, 41, 41, 40, 39, 39, 38, 38, 37, 
+  36, 36, 35, 34, 34, 33, 33, 32, 31, 31, 30, 30, 29, 29, 
+  28, 27, 27, 26, 26, 25, 25, 24, 24, 23, 23, 22, 22, 21, 
+  21, 20, 20, 19, 19, 18, 18, 18, 17, 17, 16, 16, 15, 15, 
+  15, 14, 14, 13, 13, 13, 12, 12, 11, 11, 11, 10, 10, 10,
+   9, 9, 9, 8, 8, 8, 8, 7, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 
+   4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 
+   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 };
 
-int pos = 0;   // Index to PWM's duty cycle table (= brightness)
+int pos = 0, padding = 100, offset = 100;   // Index to PWM's duty cycle table (= brightness)
 
 int main(void)
 {
@@ -98,6 +117,27 @@ int main(void)
   return 0;
 }
 
+int wrap(int inp) {
+  if(inp < 0 || inp > 249) {
+      while(inp < 0)
+        inp += 250;
+    while(inp > 249)
+      inp -= 250;
+    inp = 249 - inp;
+  }
+  return inp;
+}
+
+int get_curve(int *curpos, int padding) {
+  // *(curpos) = *curpos + 1;
+  if((*curpos) > CURVELEN && (*curpos) < CURVELEN+padding)
+    return 0;
+  if((*curpos) > CURVELEN+padding)
+    *curpos = 0;
+
+  return curve[*curpos];
+}
+
 // This will be called when timer counts to TACCR1.
 #ifdef __MSP430G2452__
 interrupt(TIMER0_A1_VECTOR) ta1_isr(void)
@@ -106,23 +146,58 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void)
 interrupt(TIMERA1_VECTOR) ta1_isr(void)
 #endif
 {
-  int new_ccr1 = 1, new_ccr2 = 1;
+  int offset_step = 1, padding_step = 1; 
+  int new_ccr1 = 1, new_ccr2 = 1, pos2 = 0;
 
   // Clear interrupt flag
   TACCTL1 &= ~CCIFG;
 
-  if (pos < 500) {
-    new_ccr1 = curve[pos++ >> 1];
-    new_ccr2 = curve[249 - (pos >> 1)];
-  } else if (pos < 1000) {
-    new_ccr1 = curve[(999 - pos++) >> 1];
-    new_ccr2 = curve[249 - ((999 - pos) >> 1)];
+  if(pos == 0) {
+    if(offset > CURVELEN || offset < 0) {
 
-  } else {
-    pos = 0;
+      offset_step = -offset_step;
+
+      if(padding > (CURVELEN-1) || padding < 0)
+        padding_step = -padding_step;
+
+      padding += padding_step;
+
+    }
+    offset = (offset+offset_step);
   }
+
+
+  pos = (pos+1) % (CURVELEN+padding);
+
+  if(pos >= CURVELEN)
+    new_ccr1 = 0;
+  else
+    new_ccr1 = curve[pos];
+
+  pos2 = (pos+offset) % (CURVELEN+padding);
+
+  if(pos2 >= CURVELEN)
+    new_ccr2 = 0;
+  else
+    new_ccr2 = curve[pos2];
+
+
+
+  // if (pos < 500) {
+  //   curpos = pos++ >> 1;
+  //   new_ccr1 = curve[curpos];
+  //   new_ccr2 = curve[wrap(curpos+offset)];
+  // } else if (pos < 1000) {
+  //   curpos = (999 - pos++) >> 1;
+  //   new_ccr1 = curve[curpos];
+  //   new_ccr2 = curve[wrap(curpos+offset)];
+
+  // } else {
+  //   pos = 0;
+  // }
   // Wait to set the new TACCR1 until TAR has gone past it, so that we
   // don't get interrupted again in this period.
+
   while (TAR <= new_ccr1 || TAR <= new_ccr2) ;
   TACCR1 = new_ccr1;
   TACCR2 = new_ccr2;
