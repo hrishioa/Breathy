@@ -1,13 +1,12 @@
-// Written in Energia due to lack of time
-
-
 //####################### BUTTON VALUES ##########################
 
 #define BTN P2_5            // Button pin
 #define BTN_LED P2_4        // Button LED for visual indication
 #define BTN_LED_ENABLE true      // Enable/disable the button led
 
-bool btnLedInUse = false;
+#define BTN_LED_CHECK 
+
+bool btnLedsInUse = false;
 
 unsigned long btnPressLength = 0;
 bool btnPressed = false;
@@ -17,9 +16,24 @@ bool btnPressed = false;
 #define BTN_MAX_HOLD_LENGTH_MICROS 600000000 // 10 minutes maximum hold
 
 #define MODE_PARTY_MINIMUM_MICROS 30000
-#define MODE_PARTY_ROUNDS       10
+#define MODE_PARTY_ROUNDS       5
 #define MODE_PARTY_DELAY_MS     75
 #define MODE_PARTY_ROUND_DELAY_MS 50
+
+#define MIN_MICROS 0
+#define MAX_MICROS 1
+#define MODE_LED_PIN        2
+
+#define MODELEN    3
+
+#define SPEED_MODE 1
+#define BREATH_TYPE_MODE 2
+
+long btnLedModes[][3] = {
+  { 0, 1000000, P2_4 },
+  { 100000, 2000000, P2_6 },
+  { 2000000, 4000000, P2_7 }
+};
 
 //####################### LED VALUES ##############################
 
@@ -69,12 +83,15 @@ void setup() {
   
   // Serial init - temporary
   Serial.begin(9600);
-  Serial.println("Hello");
+  Serial.println("Hello!");
 
   // Enable button LED
   if(BTN_LED_ENABLE) {
-    pinMode(BTN_LED, OUTPUT);
-    digitalWrite(BTN_LED, LOW);
+    Serial.println("C");
+    for(int i=0;i<MODELEN;i++) {
+      pinMode(btnLedModes[i][MODE_LED_PIN], OUTPUT);
+      digitalWrite(btnLedModes[i][MODE_LED_PIN], LOW);      
+    }
   }
 
   // Flash Welcome
@@ -138,27 +155,42 @@ void welcomeFlash() {
   }
 }
 
+void btnLights() {
+  if(!btnLedsInUse) {
+    if(btnPressed) {
+      unsigned long pLength = micros() - btnPressLength;
+  
+      for(int i=0;i<MODELEN+1;i++) {
+        if(i==MODELEN) {
+          for(int j=0;j<MODELEN;j++)
+            digitalWrite(btnLedModes[j][MODE_LED_PIN], HIGH);
+        }
+        if(pLength > btnLedModes[i][MIN_MICROS] && pLength <= btnLedModes[i][MAX_MICROS]) {
+          for(int j=0;j<MODELEN;j++)
+            digitalWrite(btnLedModes[j][MODE_LED_PIN], i==j);
+          break;
+        }
+      }
+    } else {
+      for(int j=0;j<MODELEN;j++)
+        digitalWrite(btnLedModes[j][MODE_LED_PIN], LOW);    
+    }    
+  }
+}
+
 void btnPress() {   
    if(!btnPressed) {
     // Button is being pressed    
 
-    btnPressed = true;
-    btnPressLength = micros();
+     btnPressed = true;
+     btnPressLength = micros();
 
-    if(BTN_LED_ENABLE && !btnLedInUse)
-      digitalWrite(BTN_LED, HIGH);
-
-    Serial.println("P");    
+     Serial.println("B");    
    } else {
     // Button is being released
-
-    btnPressed = false;
-    btnPressLength = micros() - btnPressLength;
-
-    // TODO: Once we know button press length, do something with it
-
-    if(BTN_LED_ENABLE)
-      digitalWrite(BTN_LED, LOW);
+    
+     btnPressed = false;
+     btnPressLength = micros() - btnPressLength;
 
      Serial.println("D");
      Serial.println(btnPressLength);
@@ -168,12 +200,20 @@ void btnPress() {
 }
 
 void newMode(unsigned long buttonPressLength) {
-    if(buttonPressLength > BTN_MAX_HOLD_LENGTH_MICROS)
+    if(buttonPressLength > btnLedModes[MODELEN-1][MAX_MICROS])
       return;
 
     if(buttonPressLength < MODE_PARTY_MINIMUM_MICROS) {
       partyMode();
+      return;
     }
+
+   for(int i=1;i<MODELEN;i++) {
+      if(buttonPressLength > btnLedModes[i][MIN_MICROS] && buttonPressLength <= btnLedModes[i][MAX_MICROS]) {
+        Serial.println(i);
+        break;
+      }
+   }
 }
 
 void partyMode() {
@@ -184,13 +224,13 @@ void partyMode() {
     }
 
     for(int round=0;round<MODE_PARTY_ROUNDS; round++) {
-      for(int led=0;led<LEDLEN+1;led++) {
-        if(led == LEDLEN) {
-          btnLedInUse = true;
-          digitalWrite(BTN_LED,HIGH);
+      for(int led=0;led<LEDLEN+MODELEN;led++) {
+        if(led >= LEDLEN) {
+          btnLedsInUse = true;
+          digitalWrite(btnLedModes[led-LEDLEN][MODE_LED_PIN],HIGH);
           delay(MODE_PARTY_DELAY_MS);
-          digitalWrite(BTN_LED,LOW);
-          btnLedInUse = false;
+          digitalWrite(btnLedModes[led-LEDLEN][MODE_LED_PIN],LOW);
+          btnLedsInUse = false;
         } else {
           digitalWrite(ledConfigs[led][LED_PIN],HIGH);
           delay(MODE_PARTY_DELAY_MS);
@@ -242,7 +282,8 @@ void stepLeds() {
     stepLed(i);
 }
 
-void loop() {
+void loop() {  
   stepLeds();
+  btnLights();
   delay(LED_TIMESTEP_MS);
 }
