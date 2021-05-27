@@ -11,14 +11,9 @@ bool btnLedsInUse = false;
 unsigned long btnPressLength = 0;
 bool btnPressed = false;
 
+#define RANDOMNESSPIN       P1_4
+
 //####################### BUTTON MODE CONFIG #####################
-
-#define BTN_MAX_HOLD_LENGTH_MICROS 600000000 // 10 minutes maximum hold
-
-#define MODE_PARTY_MINIMUM_MICROS 30000
-#define MODE_PARTY_ROUNDS       5
-#define MODE_PARTY_DELAY_MS     75
-#define MODE_PARTY_ROUND_DELAY_MS 50
 
 #define MIN_MICROS 0
 #define MAX_MICROS 1
@@ -35,15 +30,37 @@ long btnLedModes[][3] = {
   { 2000000, 4000000, P2_7 }
 };
 
+unsigned int nextLed = 0;
+
+//----------------------- PARTY MODE CONFIG ##################
+
+#define MODE_PARTY_MINIMUM_MICROS 30000
+#define MODE_PARTY_ROUNDS       5
+#define MODE_PARTY_DELAY_MS     75
+#define MODE_PARTY_ROUND_DELAY_MS 50
+
+//----------------------- MEDITATION MODE CONFIG ##################
+
+bool meditationModeOn = false;
+
+//####################### BREATH MODE CONFIG ######################
+
+#define REGULAR_BREATHING 0
+#define PANTING_BREATHING 1
+#define SHORT_BREATHING   2
+#define BOX_BREATHING     3
+
+#define BREATHMODELEN     4
+
 //####################### LED VALUES ##############################
 
 #define LEDLEN                  2            // Number of LEDs
 
 // LED Configuration Table
 // Default values are invalid until initialized and marked as updating
-int ledConfigs[][9] = {
-  {0,0,0,0,0, P1_6, 0, 1, 1}, 
-  {0,0,0,0,0, P2_1, 0, 1, 1}
+int ledConfigs[][10] = {
+  {0,0,0,0,0,0, P1_6, 0, 1, 1}, 
+  {0,0,0,0,0,0, P2_1, 0, 1, 1}
 };
 
 #define BREATH_HOLD_PERCENT     0
@@ -51,11 +68,12 @@ int ledConfigs[][9] = {
 #define BREATH_EMPTY_PERCENT    2
 #define BREATH_EMPTY_VALUE      3
 #define COUNT_MAX               4
-#define LED_PIN                 5
+#define BRIGHTNESS_PERCENT      5
+#define LED_PIN                 6
 // Dynamic Values
-#define COUNTER                 6
-#define DIRECTION               7
-#define UPDATING                8
+#define COUNTER                 7
+#define DIRECTION               8
+#define UPDATING                9
 
 #define TRANSITION_LOW          0
 #define TRANSITION_SMOOTH       1  
@@ -78,8 +96,12 @@ void setup() {
     pinMode(ledConfigs[i][LED_PIN], OUTPUT);
     // Initialize Counters
     ledConfigs[i][COUNTER] = 0;    
-    configureLeds(i, TRANSITION_HIGH);
+    ledMode(SHORT_BREATHING, i, TRANSITION_HIGH);
   }
+
+  // Initialize and read the random seed
+  pinMode(RANDOMNESSPIN, INPUT);
+  randomSeed(analogRead(RANDOMNESSPIN));
   
   // Serial init - temporary
   Serial.begin(9600);
@@ -103,7 +125,24 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(BTN), btnPress, CHANGE); 
 }
 
-void configureLeds(unsigned int led, int transition) {
+void ledMode(unsigned int mode, int led, int transition) {
+  switch(mode) {
+    case REGULAR_BREATHING:
+      configureLeds(led, transition, 100, 450, 2, 40);
+      break;
+    case PANTING_BREATHING:
+      configureLeds(led, transition, 100, 110, 0, 15);
+      break;
+    case SHORT_BREATHING:
+      configureLeds(led, transition, 20, 100, 0, 40);
+      break;
+    case BOX_BREATHING:
+      configureLeds(led, transition, 100, 1340, 33, 33);
+      break;
+  }
+}
+
+void configureLeds(unsigned int led, int transition, int brightnessPercent, int countMax, int bHoldPercent, int bEmptyPercent) {
   // Take lock
   ledConfigs[led][UPDATING] = 1;
   
@@ -111,9 +150,10 @@ void configureLeds(unsigned int led, int transition) {
   int oldCountMax = ledConfigs[led][COUNT_MAX];
 
   // Load new params
-  ledConfigs[led][COUNT_MAX] = 450;
-  ledConfigs[led][BREATH_HOLD_PERCENT] = 2;
-  ledConfigs[led][BREATH_EMPTY_PERCENT] = 40;
+  ledConfigs[led][COUNT_MAX] = countMax;
+  ledConfigs[led][BRIGHTNESS_PERCENT] = brightnessPercent;
+  ledConfigs[led][BREATH_HOLD_PERCENT] = bHoldPercent;
+  ledConfigs[led][BREATH_EMPTY_PERCENT] = bEmptyPercent;
 
   //dynamic values;
   if(transition == TRANSITION_HIGH) {
@@ -200,8 +240,16 @@ void btnPress() {
 }
 
 void newMode(unsigned long buttonPressLength) {
-    if(buttonPressLength > btnLedModes[MODELEN-1][MAX_MICROS])
+    if(buttonPressLength > btnLedModes[MODELEN-1][MAX_MICROS]) {
+      if(!meditationModeOn)
+        meditationMode(true);
       return;
+    }
+
+    if(meditationModeOn) {
+      meditationMode(false);
+      return;
+    }
 
     if(buttonPressLength < MODE_PARTY_MINIMUM_MICROS) {
       partyMode();
@@ -209,11 +257,26 @@ void newMode(unsigned long buttonPressLength) {
     }
 
    for(int i=1;i<MODELEN;i++) {
-      if(buttonPressLength > btnLedModes[i][MIN_MICROS] && buttonPressLength <= btnLedModes[i][MAX_MICROS]) {
-        Serial.println(i);
+      if(buttonPressLength > btnLedModes[i][MIN_MICROS] && buttonPressLength <= btnLedModes[i][MAX_MICROS]) {        
+        if(i == 2) {
+          ledMode(random(BREATHMODELEN), nextLed, TRANSITION_SMOOTH);
+          nextLed = (nextLed + 1) % LEDLEN;          
+        }
+        // Serial.println(i);
         break;
       }
    }
+}
+
+void meditationMode(bool status) {
+  meditationModeOn = status;
+
+  for(int i=0;i<LEDLEN;i++) {
+    if(status)
+      ledMode(BOX_BREATHING, i, TRANSITION_LOW);
+    else
+      ledMode(random(BREATHMODELEN), i, TRANSITION_SMOOTH);
+  }
 }
 
 void partyMode() {
@@ -257,6 +320,8 @@ void setBrightness(unsigned int led) {
   } else {
     float pos = ((float)ledConfigs[led][COUNTER]-ledConfigs[led][BREATH_EMPTY_VALUE])/((float)ledConfigs[led][BREATH_HOLD_VALUE]-ledConfigs[led][BREATH_EMPTY_VALUE]);
     pos = (tanh((5*(pos-0.5)))/2)+0.5;
+    if(ledConfigs[led][BRIGHTNESS_PERCENT] < 100)
+      pos = pos * ((float)ledConfigs[led][BRIGHTNESS_PERCENT]/100.0);
     brightness = pos*255;
   }
 
