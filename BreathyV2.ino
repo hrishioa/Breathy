@@ -43,6 +43,8 @@ unsigned int nextLed = 0;
 
 bool meditationModeOn = false;
 
+#define MEDITATION_MODE_PRESS_MAX_MICROS 3000000
+
 //####################### BREATH MODE CONFIG ######################
 
 #define REGULAR_BREATHING 0
@@ -83,8 +85,8 @@ int modeRanges[][3][2] = {
 
 //####################### CONTINUOUS SPEED VARIATION ##############
 
-#define ROUNDS_PER_CHANGE       1   
-#define SPEED_CHANGE_STEP       5  
+#define ROUNDS_PER_CHANGE       1
+#define SPEED_CHANGE_STEP       5
 
 //####################### LED VALUES ##############################
 
@@ -124,7 +126,7 @@ int ledConfigs[][14] = {
 
 #define WELCOME_FLASH_ENABLED   true
 #define WELCOME_FLASH_PULSE_MS  250
-#define WELCOME_FLASH_PULSES    3
+#define WELCOME_FLASH_PULSES    2
 
 //####################### START CODE ###############################
 
@@ -318,15 +320,17 @@ void btnPress() {
   }
 }
 
-void newMode(unsigned long buttonPressLength) {
+void newMode(long buttonPressLength) {
   if (buttonPressLength > btnLedModes[MODELEN - 1][MAX_MICROS]) {
-    if (!meditationModeOn)
-      meditationMode(true);
-    return;
+    if (!meditationModeOn) {
+      meditationMode(true, buttonPressLength-btnLedModes[MODELEN-1][MAX_MICROS]);
+      return;      
+    }
+
   }
 
   if (meditationModeOn) {
-    meditationMode(false);
+    meditationMode(false, -1);
     return;
   }
 
@@ -341,13 +345,13 @@ void newMode(unsigned long buttonPressLength) {
     if (buttonPressLength > btnLedModes[mode][MIN_MICROS] && buttonPressLength <= btnLedModes[mode][MAX_MICROS]) {
       if(mode == SPEED_MODE) {
         unsigned int speed = random(RANGE_MAX_VALUE);
-        ledMode(-1, nextLed, TRANSITION_SMOOTH, speed);
+        ledMode(-1, nextLed, TRANSITION_HIGH, speed);
         nextLed = (nextLed + 1) % LEDLEN;
       } else if (mode == BREATH_TYPE_MODE) {
         int newMode = random(BREATHMODELEN-1);
         if(newMode == ledConfigs[nextLed][MODE])
           newMode++;
-        ledMode(newMode, nextLed, TRANSITION_SMOOTH, -1);
+        ledMode(newMode, nextLed, TRANSITION_HIGH, -1);
         nextLed = (nextLed + 1) % LEDLEN;
       }
       break;
@@ -355,14 +359,23 @@ void newMode(unsigned long buttonPressLength) {
   }
 }
 
-void meditationMode(bool status) {
+void meditationMode(bool status, float pressLength) {
   meditationModeOn = status;
 
-  for (int i = 0; i < LEDLEN; i++) {
-    if (status)
-      ledMode(BOX_BREATHING, i, TRANSITION_HIGH, -1);
-    else
-      ledMode(random(BREATHMODELEN), i, TRANSITION_SMOOTH, -1);
+  if(status) {
+      if(pressLength > MEDITATION_MODE_PRESS_MAX_MICROS)
+          pressLength = MEDITATION_MODE_PRESS_MAX_MICROS;
+      if(pressLength < 0)
+          pressLength = 0;
+
+      int meditationSpeed = ((float)pressLength/MEDITATION_MODE_PRESS_MAX_MICROS)*RANGE_MAX_VALUE;
+
+      for (int i = 0; i < LEDLEN; i++) {
+          ledMode(BOX_BREATHING, i, TRANSITION_HIGH, meditationSpeed);
+      }
+  } else {
+      for (int i = 0; i < LEDLEN; i++)
+          ledMode(random(BREATHMODELEN), i, TRANSITION_SMOOTH, -1);
   }
 }
 
