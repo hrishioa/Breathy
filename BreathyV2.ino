@@ -56,6 +56,7 @@ bool meditationModeOn = false;
 #define RANGE_MAX         1
 
 #define RANGE_MAX_VALUE   100
+#define RANGE_MIN_DISTANCE 10 //If random range ends up closer than this, we'll push it
 
 int modeRanges[][3][2] = {
   { //SLOWEST,FASTEST}          // REGULAR
@@ -80,6 +81,10 @@ int modeRanges[][3][2] = {
   }
 };
 
+//####################### CONTINUOUS SPEED VARIATION ##############
+
+#define ROUNDS_PER_CHANGE       1   
+#define SPEED_CHANGE_STEP       5  
 
 //####################### LED VALUES ##############################
 
@@ -87,9 +92,9 @@ int modeRanges[][3][2] = {
 
 // LED Configuration Table
 // Default values are invalid until initialized and marked as updating
-int ledConfigs[][12] = {
-  {0, 0, 0, 0, 0, 0, P1_6, 0, 1, 500, 0, 1},
-  {0, 0, 0, 0, 0, 0, P2_1, 0, 1, 500, 0, 1}
+int ledConfigs[][14] = {
+  {0, 0, 0, 0, 0, 0, P1_6, 0, 1, 500, 0, ROUNDS_PER_CHANGE, 1, 1},
+  {0, 0, 0, 0, 0, 0, P2_1, 0, 1, 500, 0, ROUNDS_PER_CHANGE, 1, 1}
 };
 
 #define COUNT_MAX               0
@@ -104,7 +109,9 @@ int ledConfigs[][12] = {
 #define DIRECTION               8
 #define SPEED                   9
 #define MODE                    10
-#define UPDATING                11
+#define ROUNDS_TILL_CHANGE      11
+#define SPEED_CHANGE_DIRECTION  12
+#define UPDATING                13
 
 #define TRANSITION_LOW          0
 #define TRANSITION_SMOOTH       1
@@ -127,12 +134,8 @@ void setup() {
     pinMode(ledConfigs[i][LED_PIN], OUTPUT);
     // Initialize Counters
     ledConfigs[i][COUNTER] = 0;
-    ledMode(BOX_BREATHING, i, TRANSITION_HIGH, 0);
+    ledMode(random(MODELEN), i, TRANSITION_HIGH, 0);
   }
-
-  // Testing short breathing
-//    configureLeds(0, TRANSITION_HIGH, 100, 500, 33, 33);
-//    configureLeds(1, TRANSITION_HIGH, 100, 500, 33, 33);
 
   // Initialize and read the random seed
   pinMode(RANDOMNESSPIN, INPUT);
@@ -172,8 +175,22 @@ void ledMode(unsigned int mode, int led, int transition, int newSpeed) {
   else
     mode = ledConfigs[led][MODE];
 
-  if (newSpeed >= 0)
+  if (newSpeed >= 0) {
+    if(newSpeed > ledConfigs[led][SPEED] && newSpeed-ledConfigs[led][SPEED] < RANGE_MIN_DISTANCE) {
+      newSpeed += RANGE_MIN_DISTANCE;
+    } else if(ledConfigs[led][SPEED] > newSpeed && ledConfigs[led][SPEED]-newSpeed < RANGE_MIN_DISTANCE) {
+      newSpeed -= RANGE_MIN_DISTANCE;
+    }
+
+    if(newSpeed > RANGE_MAX_VALUE)
+      newSpeed = RANGE_MAX_VALUE;
+    if(newSpeed < 0)
+      newSpeed = 0;
+
+
     ledConfigs[led][SPEED] = newSpeed;
+  }
+
 
   switch (mode) {
     case REGULAR_BREATHING:
@@ -327,7 +344,10 @@ void newMode(unsigned long buttonPressLength) {
         ledMode(-1, nextLed, TRANSITION_SMOOTH, speed);
         nextLed = (nextLed + 1) % LEDLEN;
       } else if (mode == BREATH_TYPE_MODE) {
-        ledMode(random(BREATHMODELEN), nextLed, TRANSITION_SMOOTH, -1);
+        int newMode = random(BREATHMODELEN-1);
+        if(newMode == ledConfigs[nextLed][MODE])
+          newMode++;
+        ledMode(newMode, nextLed, TRANSITION_SMOOTH, -1);
         nextLed = (nextLed + 1) % LEDLEN;
       }
       break;
@@ -395,6 +415,30 @@ void setBrightness(unsigned int led) {
   analogWrite(ledConfigs[led][LED_PIN], brightness);
 }
 
+void roundChange(unsigned int led) {
+  //Check for probability of mode change (once per full round)
+  unsigned int modeChangeProb = random((RANGE_MAX_VALUE*2)/SPEED_CHANGE_STEP);
+
+  if(modeChangeProb < 1) {
+    int newMode = random(BREATHMODELEN-1);
+    if(newMode == ledConfigs[led][MODE])
+      newMode++;
+    ledMode(newMode, led, TRANSITION_SMOOTH, -1);
+  } else {
+    // Change speed
+    int newSpeed = ledConfigs[led][SPEED]+(ledConfigs[led][SPEED_CHANGE_DIRECTION]*SPEED_CHANGE_STEP);
+    if(newSpeed >= RANGE_MAX_VALUE) {
+      newSpeed = RANGE_MAX_VALUE;
+      ledConfigs[led][SPEED_CHANGE_DIRECTION] = -1;
+    } else if(newSpeed <= 0) {
+      newSpeed = 0;
+      ledConfigs[led][SPEED_CHANGE_DIRECTION] = 1;
+    }
+
+    ledMode(-1, led, TRANSITION_SMOOTH, newSpeed);
+  }
+}
+
 void stepLed(unsigned int led) {
   ledConfigs[led][COUNTER] += ledConfigs[led][DIRECTION] * LED_COUNTER_STEP;
 
@@ -402,6 +446,11 @@ void stepLed(unsigned int led) {
     ledConfigs[led][COUNTER] = ledConfigs[led][COUNT_MAX];
     ledConfigs[led][DIRECTION] = -1;
   } else if (ledConfigs[led][COUNTER] <= 0) {
+    ledConfigs[led][ROUNDS_TILL_CHANGE]--;
+    if(ledConfigs[led][ROUNDS_TILL_CHANGE] <= 0) {
+      ledConfigs[led][ROUNDS_TILL_CHANGE] = 0;
+      roundChange(led);
+    }
     ledConfigs[led][COUNTER] = 0;
     ledConfigs[led][DIRECTION] = 1;
   }
