@@ -25,9 +25,9 @@ bool btnPressed = false;
 #define BREATH_TYPE_MODE 2
 
 long btnLedModes[][3] = {
-  { 0,      1000000, P2_4 },
-  { 1000000, 2000000, P2_6 },
-  { 2000000, 4000000, P2_7 }
+  { 0,      1000000, P2_0 },
+  { 1000000, 2000000, P2_2 },
+  { 2000000, 4000000, P2_3 }
 };
 
 unsigned int nextLed = 0;
@@ -151,7 +151,7 @@ void setup() {
   if (BTN_LED_ENABLE) {
     for (int i = 0; i < MODELEN; i++) {
       pinMode(btnLedModes[i][MODE_LED_PIN], OUTPUT);
-      digitalWrite(btnLedModes[i][MODE_LED_PIN], LOW);
+      digitalWrite(btnLedModes[i][MODE_LED_PIN], !LOW);
     }
   }
 
@@ -283,17 +283,17 @@ void btnLights() {
       for (int i = 0; i < MODELEN + 1; i++) {
         if (i == MODELEN) {
           for (int j = 0; j < MODELEN; j++)
-            digitalWrite(btnLedModes[j][MODE_LED_PIN], HIGH);
+            digitalWrite(btnLedModes[j][MODE_LED_PIN], !HIGH);
         }
         if (pLength > btnLedModes[i][MIN_MICROS] && pLength <= btnLedModes[i][MAX_MICROS]) {
           for (int j = 0; j < MODELEN; j++)
-            digitalWrite(btnLedModes[j][MODE_LED_PIN], i == j);
+            digitalWrite(btnLedModes[j][MODE_LED_PIN], !(i == j));
           break;
         }
       }
     } else {
       for (int j = 0; j < MODELEN; j++)
-        digitalWrite(btnLedModes[j][MODE_LED_PIN], LOW);
+        digitalWrite(btnLedModes[j][MODE_LED_PIN], !LOW);
     }
   }
 }
@@ -384,9 +384,9 @@ void partyMode() {
     for (int led = 0; led < LEDLEN + MODELEN; led++) {
       if (led >= LEDLEN) {
         btnLedsInUse = true;
-        digitalWrite(btnLedModes[led - LEDLEN][MODE_LED_PIN], HIGH);
+        digitalWrite(btnLedModes[led - LEDLEN][MODE_LED_PIN], !HIGH);
         delay(MODE_PARTY_DELAY_MS);
-        digitalWrite(btnLedModes[led - LEDLEN][MODE_LED_PIN], LOW);
+        digitalWrite(btnLedModes[led - LEDLEN][MODE_LED_PIN], !LOW);
         btnLedsInUse = false;
       } else {
         digitalWrite(ledConfigs[led][LED_PIN], HIGH);
