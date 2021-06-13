@@ -144,12 +144,11 @@ void setup() {
   randomSeed(analogRead(RANDOMNESSPIN));
 
   // Serial init - temporary
-  Serial.begin(9600);
-  Serial.println("Hello!");
+//  Serial.begin(9600);
+//  Serial.println("Hello!");
 
   // Enable button LED
   if (BTN_LED_ENABLE) {
-    Serial.println("C");
     for (int i = 0; i < MODELEN; i++) {
       pinMode(btnLedModes[i][MODE_LED_PIN], OUTPUT);
       digitalWrite(btnLedModes[i][MODE_LED_PIN], LOW);
@@ -305,16 +304,11 @@ void btnPress() {
 
     btnPressed = true;
     btnPressLength = micros();
-
-    Serial.println("B");
   } else {
     // Button is being released
 
     btnPressed = false;
     btnPressLength = micros() - btnPressLength;
-
-    Serial.println("D");
-    Serial.println(btnPressLength);
 
     newMode(btnPressLength);
   }
@@ -430,25 +424,29 @@ void setBrightness(unsigned int led) {
 
 void roundChange(unsigned int led) {
   //Check for probability of mode change (once per full round)
-  unsigned int modeChangeProb = random((RANGE_MAX_VALUE*2)/SPEED_CHANGE_STEP);
+  
 
-  if(modeChangeProb < 1) {
-    int newMode = random(BREATHMODELEN-1);
-    if(newMode == ledConfigs[led][MODE])
-      newMode++;
-    ledMode(newMode, led, TRANSITION_SMOOTH, -1);
-  } else {
-    // Change speed
-    int newSpeed = ledConfigs[led][SPEED]+(ledConfigs[led][SPEED_CHANGE_DIRECTION]*SPEED_CHANGE_STEP);
-    if(newSpeed >= RANGE_MAX_VALUE) {
-      newSpeed = RANGE_MAX_VALUE;
-      ledConfigs[led][SPEED_CHANGE_DIRECTION] = -1;
-    } else if(newSpeed <= 0) {
-      newSpeed = 0;
-      ledConfigs[led][SPEED_CHANGE_DIRECTION] = 1;
-    }
-
-    ledMode(-1, led, TRANSITION_SMOOTH, newSpeed);
+  if(!meditationModeOn) {
+    unsigned int modeChangeProb = random((RANGE_MAX_VALUE*2)/SPEED_CHANGE_STEP);
+    
+    if(modeChangeProb < 1) {
+      int newMode = random(BREATHMODELEN-1);
+      if(newMode == ledConfigs[led][MODE])
+        newMode++;
+      ledMode(newMode, led, TRANSITION_SMOOTH, -1);
+    } else {
+      // Change speed
+      int newSpeed = ledConfigs[led][SPEED]+(ledConfigs[led][SPEED_CHANGE_DIRECTION]*SPEED_CHANGE_STEP);
+      if(newSpeed >= RANGE_MAX_VALUE) {
+        newSpeed = RANGE_MAX_VALUE;
+        ledConfigs[led][SPEED_CHANGE_DIRECTION] = -1;
+      } else if(newSpeed <= 0) {
+        newSpeed = 0;
+        ledConfigs[led][SPEED_CHANGE_DIRECTION] = 1;
+      }
+  
+      ledMode(-1, led, TRANSITION_SMOOTH, newSpeed);
+    }    
   }
 }
 
