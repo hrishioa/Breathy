@@ -1,7 +1,6 @@
 //####################### BUTTON VALUES ##########################
 
 #define BTN P2_5            // Button pin
-#define BTN_LED P2_4        // Button LED for visual indication
 #define BTN_LED_ENABLE true      // Enable/disable the button led
 
 #define BTN_LED_CHECK
@@ -10,6 +9,7 @@ bool btnLedsInUse = false;
 
 unsigned long btnPressLength = 0;
 bool btnPressed = false;
+bool finalButtonMode = false;
 
 #define RANDOMNESSPIN       P1_4
 
@@ -25,9 +25,9 @@ bool btnPressed = false;
 #define BREATH_TYPE_MODE 2
 
 long btnLedModes[][3] = {
-  { 0,      1000000, P2_0 },
-  { 1000000, 2000000, P2_2 },
-  { 2000000, 4000000, P2_3 }
+  { 0,      1000000, P2_2 },
+  { 1000000, 2000000, P2_3 },
+  { 2000000, 4000000, P2_4 }
 };
 
 unsigned int nextLed = 0;
@@ -142,10 +142,6 @@ void setup() {
   // Initialize and read the random seed
   pinMode(RANDOMNESSPIN, INPUT);
   randomSeed(analogRead(RANDOMNESSPIN));
-
-  // Serial init - temporary
-//  Serial.begin(9600);
-//  Serial.println("Hello!");
 
   // Enable button LED
   if (BTN_LED_ENABLE) {
@@ -282,16 +278,26 @@ void btnLights() {
 
       for (int i = 0; i < MODELEN + 1; i++) {
         if (i == MODELEN) {
-          for (int j = 0; j < MODELEN; j++)
-            digitalWrite(btnLedModes[j][MODE_LED_PIN], !HIGH);
+          if(!finalButtonMode) {
+            finalButtonMode = true;
+            for (int j = 0, ledOnCount = 0; j < MODELEN; j++) {
+              bool ledEnabled = (j==MODELEN-1 && ledOnCount < 2) || (j != MODELEN-1 && (random(MODELEN)<=(MODELEN-2)));
+              if(ledEnabled)
+                ledOnCount++;
+              digitalWrite(btnLedModes[j][MODE_LED_PIN], !ledEnabled);
+            }
+          }
+
         }
-        if (pLength > btnLedModes[i][MIN_MICROS] && pLength <= btnLedModes[i][MAX_MICROS]) {
+        else if (pLength > btnLedModes[i][MIN_MICROS] && pLength <= btnLedModes[i][MAX_MICROS]) {
+          finalButtonMode = false;
           for (int j = 0; j < MODELEN; j++)
             digitalWrite(btnLedModes[j][MODE_LED_PIN], !(i == j));
           break;
         }
       }
     } else {
+      finalButtonMode = false;
       for (int j = 0; j < MODELEN; j++)
         digitalWrite(btnLedModes[j][MODE_LED_PIN], !LOW);
     }
@@ -385,7 +391,7 @@ void partyMode() {
       if (led >= LEDLEN) {
         btnLedsInUse = true;
         digitalWrite(btnLedModes[led - LEDLEN][MODE_LED_PIN], !HIGH);
-        delay(MODE_PARTY_DELAY_MS);
+        delay(MODE_PARTY_DELAY_MS*2);
         digitalWrite(btnLedModes[led - LEDLEN][MODE_LED_PIN], !LOW);
         btnLedsInUse = false;
       } else {
